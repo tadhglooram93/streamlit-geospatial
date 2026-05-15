@@ -1,0 +1,33 @@
+name: Earth Engine credential smoke test
+
+on:
+  schedule:
+    # Mondays at 13:00 UTC. Adjust as needed.
+    - cron: "0 13 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Earth Engine client
+        run: |
+          python -m pip install --upgrade pip
+          # Minimal install: only what the smoke test imports.
+          pip install earthengine-api streamlit
+
+      - name: Run smoke test
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          EE_PROJECT_ID: ${{ secrets.EE_PROJECT_ID }}
+        run: python scripts/smoke_test_ee.py
