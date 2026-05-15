@@ -1,6 +1,11 @@
 import ee
 import json
 import os
+
+# Folium-only app: without this, geemap's default ipyleaflet import sets `geemap.basemaps`
+# to a python-box object and `import geemap.foliumap` fails on `basemaps.xyz_to_folium()`.
+os.environ.setdefault("USE_FOLIUM", "1")
+
 import warnings
 import datetime
 import fiona

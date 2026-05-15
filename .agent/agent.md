@@ -83,7 +83,7 @@ The upstream demo used `geemap.coreutils.ee_initialize`, which reads `EARTHENGIN
 4. **System packages**: Anything that shells out to **ffmpeg** / **gifsicle** / GDAL must keep `packages.txt` in sync.
 5. **Secrets**: Never print or log `GCP_SERVICE_ACCOUNT_JSON`, key file paths, or HF tokens. Use **HF Space variables and secrets** (Settings → Variables and secrets); use **GitHub Actions secrets** for CI.
 6. **Pre-commit**: Run `pre-commit run --all-files` before large Python edits if the contributor uses pre-commit locally.
-7. **Testing**: No formal test suite. Quick checks: `python -c "import ee_auth"`, `python scripts/smoke_test_ee.py` (with secrets), `streamlit run Home.py` (with secrets) and run one small Landsat timelapse.
+7. **Testing**: No formal test suite. Quick checks: `python -c "import ee_auth"`, `python scripts/smoke_test_ee.py` (with secrets), `docker compose up --build` from the repo root (`.env` with EE secrets; same image as HF) and run one small Landsat timelapse, or `streamlit run Home.py` if using a native venv.
 
 ---
 
@@ -213,7 +213,12 @@ With service-account auth the EE smoke test is near-zero maintenance; the sync w
 ## 5. Quick reference commands
 
 ```bash
-# Local run (from repo root)
+# Local run (Docker — same image as Hugging Face)
+docker compose up --build
+```
+
+```bash
+# Local run (native venv; install APT deps from packages.txt yourself)
 streamlit run Home.py
 ```
 

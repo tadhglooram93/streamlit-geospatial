@@ -1,0 +1,17 @@
+# Local dev: same image and CMD as Hugging Face Spaces (Streamlit on 7860).
+# Create `.env` from `.env.example` before `docker compose up --build`.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: streamlit-geospatial:local
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env
+    # Uncomment for faster iteration: edit Python on the host without rebuilding.
+    # Dependencies still come from the image (site-packages is outside this mount).
+    # volumes:
+    #   - .:/home/user/app

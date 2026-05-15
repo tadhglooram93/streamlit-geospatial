@@ -37,7 +37,7 @@ that the upstream demo did.
 
 - A Google account (will be associated with your Google Cloud project).
 - A Hugging Face account (the Space can be free CPU and stay private).
-- Basic familiarity with the terminal (Python venv, environment variables).
+- Basic familiarity with the terminal and [Docker](https://docs.docker.com/get-docker/) for local runs (optional native Python is documented below).
 
 ## One-time setup (≈20 minutes)
 
@@ -167,31 +167,55 @@ the [official Hub pattern](https://huggingface.co/docs/hub/spaces-github-actions
 
 After the Space build finishes, open the Space URL — the map should load if step **8** is complete.
 
-## Local development
+## Local development (Docker)
+
+Use the same [`Dockerfile`](Dockerfile) as Hugging Face so a successful local
+build is a strong signal the Space build will work.
+
+**Prerequisites:** Docker (Docker Desktop on macOS/Windows, or Docker Engine on
+Linux). Compose file v2 is bundled as `docker compose`.
 
 ```bash
 git clone <this-repo>
 cd streamlit-geospatial
 
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
 cp .env.example .env
 # Edit .env: set GCP_SERVICE_ACCOUNT_JSON and EE_PROJECT_ID for Earth Engine.
-# Make sure GCP_SERVICE_ACCOUNT_JSON is on a single line of valid JSON.
-# Optional lines HF_TOKEN / HF_SPACE_REPO are for local Hub tooling only — the
-# Streamlit app does not read them. GitHub → Space sync uses Actions secrets/vars.
+# Keep GCP_SERVICE_ACCOUNT_JSON as one line of valid JSON.
+# Optional: HF_TOKEN / HF_SPACE_REPO — for local Hub tooling only; the app does
+# not read them for timelapses.
 
-# Streamlit reads environment variables from your shell; export them or use
-# a tool like `direnv` / `dotenv` to load the .env file before running.
-streamlit run Home.py
+docker compose up --build
 ```
 
-The system dependencies in [`packages.txt`](packages.txt) are mirrored in the
-[`Dockerfile`](Dockerfile) for Hugging Face Spaces. On **local** macOS/Linux,
-install equivalents yourself (for example `brew install ffmpeg gifsicle gdal`
-on macOS) before running `streamlit run Home.py`.
+Open **http://localhost:7860** in your browser.
+
+- **Rebuild from scratch** (after changing `requirements.txt` or APT deps):  
+  `docker compose build --no-cache && docker compose up`
+- **Edit code without rebuilding the image:** uncomment the `volumes` block in
+  [`docker-compose.yml`](docker-compose.yml) to bind-mount the repo into
+  `/home/user/app`. Python packages still come from the image.
+
+### Without Compose
+
+```bash
+docker build -t streamlit-geospatial:local .
+docker run --rm -p 7860:7860 --env-file .env streamlit-geospatial:local
+```
+
+### Optional: native Python (no Docker)
+
+If you prefer a venv on the host, install system packages yourself (same roles
+as [`packages.txt`](packages.txt); on macOS for example
+`brew install ffmpeg gifsicle gdal`), then:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+# Load .env into your shell (export, direnv, etc.), then:
+streamlit run Home.py
+```
 
 ## Cost expectations
 
@@ -246,6 +270,7 @@ That sequence avoids any window where two owners hold valid credentials.
 ```
 .
 ├── .agent/agent.md          # internal architecture / decisions doc
+├── docker-compose.yml       # local `docker compose up` (same image as HF)
 ├── .dockerignore            # Docker build context exclusions
 ├── .env.example             # local development environment template
 ├── .github/workflows/       # sync_to_hub.yml, ee-smoke-test.yml
