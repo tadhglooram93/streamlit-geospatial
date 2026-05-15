@@ -11,13 +11,15 @@ short_description: Generate satellite timelapse animations for any region.
 
 # Satellite Timelapse
 
-A private, single-page Streamlit app for generating satellite timelapse
-animations (Landsat, Sentinel-2, GOES, MODIS, NAIP, or any Earth Engine
-`ImageCollection`) over any region on Earth. Designed for agricultural and
-environmental research and deployed on a private Hugging Face Space.
+A single-page Streamlit app for generating satellite timelapse animations
+(Landsat, Sentinel-2, GOES, MODIS, NAIP, or any Earth Engine `ImageCollection`)
+over any region on Earth. Designed for agricultural and environmental research;
+you can run it locally or deploy it to a [Hugging Face Space](https://huggingface.co/docs/hub/spaces-overview)
+(public or private).
 
-Forked and slimmed down from
-[opengeos/streamlit-geospatial](https://github.com/opengeos/streamlit-geospatial).
+This project is based on
+[opengeos/streamlit-geospatial](https://github.com/opengeos/streamlit-geospatial),
+trimmed to a timelapse-focused workflow and service-account Earth Engine auth.
 
 ## Architecture
 
@@ -31,18 +33,19 @@ flowchart LR
 
 Authentication uses a Google Cloud **service account** registered for Earth
 Engine, so the app does not require the biweekly browser re-authentication
-that the upstream demo did.
+that the upstream repo did.
 
 ## Prerequisites
 
 - A Google account (will be associated with your Google Cloud project).
-- A Hugging Face account (the Space can be free CPU and stay private).
+- A Hugging Face account (a **CPU basic** Space is free; visibility can be public or private).
 - Basic familiarity with the terminal and [Docker](https://docs.docker.com/get-docker/) for local runs (optional native Python is documented below).
 
 ## One-time setup (≈20 minutes)
 
-You need to set this up once per owner. When ownership changes, the new
-owner repeats these steps with their own Google + Hugging Face accounts.
+Follow these steps for each **Google Cloud + Earth Engine** environment and
+each **Hugging Face Space** you deploy to (your own project, service account,
+and secrets).
 
 ### 1. Create a Google Cloud project
 
@@ -98,20 +101,20 @@ interactive Earth Engine computations like timelapses.
 
 **Deploy path (Hugging Face + GitHub Actions)** — do these in order after steps 1–6:
 
-1. **Create** a private Docker Space on Hugging Face (step **7**).
+1. **Create** a Docker Space on Hugging Face (step **7**); pick **Public** or **Private** visibility as you prefer.
 2. **Add Earth Engine secrets** on the Space: `GCP_SERVICE_ACCOUNT_JSON` and `EE_PROJECT_ID` (step **8**).
 3. **Add deploy credentials** on GitHub: repository secret `HF_TOKEN` and variable `HF_SPACE_REPO` (step **9**).
 4. **Push to `main`** on GitHub. [`.github/workflows/sync_to_hub.yml`](.github/workflows/sync_to_hub.yml) pushes this repo to the Space; Hugging Face then **rebuilds the Docker image** and runs the app.
 
 You do not need to `git push` to Hugging Face manually if you use this workflow.
 
-### 7. Create a private Hugging Face Space
+### 7. Create a Hugging Face Space
 
 Hugging Face **removed the standalone Streamlit SDK** from the Space creation
 wizard ([changelog entry](https://huggingface.co/docs/hub/spaces-changelog), 2025-04-30). **New Streamlit apps use the Docker SDK.**
 
 1. Go to <https://huggingface.co/new-space>.
-2. Choose **SDK: Docker**, **Visibility: Private**, **Hardware: CPU basic**.
+2. Choose **SDK: Docker**, **Visibility** (Public or Private), and **Hardware: CPU basic** (or another tier if you need it).
 3. Pick the **Streamlit** Docker template, or an **empty** Docker Space (the first sync in step **9** will replace template files with this repo).
 
 Hugging Face creates a **git repository on the Hub** for the Space. There is no “link my GitHub repo” button for Docker Spaces — code is shipped with **GitHub Actions** in step **9**.
@@ -231,7 +234,7 @@ Under the noncommercial Earth Engine tier this app is free:
   not be charged unless you turn on other billable products. To be safe, set a
   [budget alert](https://cloud.google.com/billing/docs/how-to/budgets) at
   `$0.01` so you get an email if any service ever incurs cost.
-- **Hugging Face**: a private Streamlit Space on CPU basic is free.
+- **Hugging Face**: a Streamlit Space on **CPU basic** is free (public or private).
 
 If you hit Earth Engine quota errors with very large regions or long date
 ranges, shrink the region of interest or shorten the date range. The app's
@@ -254,20 +257,25 @@ default is generous but Earth Engine will reject extreme requests.
 For deeper context (architecture decisions, geemap internals, IAM trade-offs)
 see [`.agent/agent.md`](.agent/agent.md).
 
-## Credential rotation and ownership handoff
+## Rotating credentials and changing deploy targets
 
-Because all **runtime** credentials live in **Hugging Face Space secrets**, and
-**deploy** credentials live in **GitHub Actions**, transferring ownership is
-mostly updating those values:
+**Runtime** credentials for the running app are **Hugging Face Space secrets**
+(`GCP_SERVICE_ACCOUNT_JSON`, `EE_PROJECT_ID`). **Deploy** credentials for the
+optional GitHub → Space sync live in **GitHub Actions** (`HF_TOKEN`,
+`HF_SPACE_REPO`).
 
-1. New owner completes steps **1–6** (their own GCP project + service account).
-2. New owner gets access to the **Space** and this **GitHub** repository (collaborator or transfer).
-3. New owner updates **Space** secrets `GCP_SERVICE_ACCOUNT_JSON` and `EE_PROJECT_ID`, and **GitHub** secret `HF_TOKEN` plus variable `HF_SPACE_REPO` if the Space URL or HF account changed; then **push to `main`** (or run the sync workflow) so the Space redeploys.
-4. New owner confirms a small timelapse renders successfully.
-5. Previous owner deletes the old service account key from
-   **IAM & Admin → Service Accounts → Keys** to revoke access.
+- **Rotate a leaked or old service account key:** create a new JSON key (or a
+  new service account), paste the new JSON into the Space secret
+  `GCP_SERVICE_ACCOUNT_JSON`, restart the Space, then remove the old key under
+  **IAM & Admin → Service Accounts → Keys** in Google Cloud.
+- **Point CI at a different Space or Hugging Face account:** update the GitHub
+  variable `HF_SPACE_REPO` and secret `HF_TOKEN`, then push to `main` or run
+  the sync workflow so the Space rebuilds.
+- **Change the Earth Engine project:** update `EE_PROJECT_ID` (and the service
+  account JSON if the principal or project changed) on the Space, then restart.
 
-That sequence avoids any window where two owners hold valid credentials.
+After any change, run a small timelapse once to confirm Earth Engine initializes
+and tiles load as expected.
 
 ## Repository layout
 
