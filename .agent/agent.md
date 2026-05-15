@@ -6,7 +6,7 @@ This document summarizes the repository, how Earth Engine auth works in practice
 >
 > - Single-page Streamlit app: `Home.py` (the timelapse module) — multipage layout removed.
 > - Earth Engine auth: service-account only, via `ee_auth.init_earth_engine()` reading `GCP_SERVICE_ACCOUNT_JSON` and `EE_PROJECT_ID` from the environment. `EARTHENGINE_TOKEN` is no longer used.
-> - Hugging Face Space metadata lives in the YAML front matter of `README.md` (`sdk: streamlit`, `app_file: Home.py`).
+> - Hugging Face Space metadata lives in the YAML front matter of `README.md` (`sdk: docker`, `app_port: 7860`). Streamlit runs inside the repo `Dockerfile` (HF deprecated the standalone Streamlit SDK for new Spaces in 2025-04).
 > - Optional credential smoke test: `scripts/smoke_test_ee.py` plus `.github/workflows/ee-smoke-test.yml` (weekly + manual dispatch).
 
 ---
@@ -25,8 +25,9 @@ This document summarizes the repository, how Earth Engine auth works in practice
 | `Home.py` | The Streamlit app. Sets page config, sidebar "About", calls `init_earth_engine()`, renders the full timelapse UI (Landsat, Sentinel-2, GOES, MODIS, NAIP, custom EE collections). |
 | `ee_auth.py` | Service-account-only Earth Engine init helper (`init_earth_engine`). Cached with `@st.cache_resource`. |
 | `requirements.txt` | Python deps; uses `--find-links` for GDAL wheels; trimmed to `earthengine-api`, `geemap[extra]`, `streamlit`, `streamlit-folium`, `folium`, `geopandas`, `fiona`, `shapely`. |
-| `packages.txt` | APT packages (ffmpeg, gifsicle, GDAL dev libs, build tools) installed on Hugging Face Spaces. |
-| `README.md` | Hugging Face Space front matter + owner-friendly setup guide (GCP, EE, SA, HF, troubleshooting, handoff). |
+| `Dockerfile` | Hugging Face **Docker** Space image: APT deps (same set as `packages.txt`), `pip install`, Streamlit on port **7860**. |
+| `packages.txt` | Documented APT package list; kept in sync with the `Dockerfile` `apt-get install` line for transparency / local dev reference. |
+| `README.md` | Hugging Face Space front matter (`sdk: docker`, `app_port: 7860`) + owner-friendly setup guide (GCP, EE, SA, HF, troubleshooting, handoff). |
 | `.env.example` | Local development template for `GCP_SERVICE_ACCOUNT_JSON` and `EE_PROJECT_ID`. |
 | `scripts/smoke_test_ee.py` | Minimal credential smoke test runnable locally or via GitHub Actions. |
 | `.github/workflows/ee-smoke-test.yml` | Scheduled (weekly) + manual workflow that runs the smoke test against `secrets.GCP_SERVICE_ACCOUNT_JSON` and `secrets.EE_PROJECT_ID`. |
@@ -158,8 +159,9 @@ OAuth via `EARTHENGINE_TOKEN` is intentionally **not** wired. If a future mainta
 
 ### 4.4 Hugging Face Space (private) — current configuration
 
-- **Entry file**: `Home.py`. The HF front matter lives in `README.md` (`sdk: streamlit`, `app_file: Home.py`, `pinned: false`).
-- **System packages**: `packages.txt` (ffmpeg, gifsicle, GDAL stack) installed automatically at build time.
+- **SDK**: Docker (`sdk: docker`, `app_port: 7860` in `README.md` front matter). Hugging Face deprecated the built-in Streamlit SDK when creating **new** Spaces ([changelog](https://huggingface.co/docs/hub/spaces-changelog), 2025-04-30); Streamlit apps now use a Docker image.
+- **Container**: Root [`Dockerfile`](../Dockerfile) installs APT deps (mirroring `packages.txt`), `pip install -r requirements.txt`, and runs `streamlit run Home.py` bound to `0.0.0.0:7860`.
+- **Python entry**: Still `Home.py` (single-page timelapse app).
 - **Secrets** (Settings → Variables and secrets):
   - `GCP_SERVICE_ACCOUNT_JSON` — full SA JSON.
   - `EE_PROJECT_ID` — GCP project id (optional if the JSON has `project_id`).
@@ -176,6 +178,7 @@ What changed from upstream:
 4. `requirements.txt` trimmed to the minimum needed by `Home.py` (no `keplergl`, `leafmap`, `localtileserver`, `plotly`, `pyarrow`).
 5. Auth helper extracted into `ee_auth.py`; `Home.py` calls `init_earth_engine()`.
 6. Silent `try/except: pass` wrapper around `app()` replaced with one that surfaces errors to the user and re-raises.
+7. Root `Dockerfile` + `sdk: docker` / `app_port: 7860` in `README.md` for Hugging Face (standalone Streamlit SDK removed from new-Space UI in 2025-04).
 
 Future agents who want to slim further can drop unused collection branches in `Home.py` (e.g. NAIP, MODIS Ocean, Any EE ImageCollection) and remove `geemap.colormaps` if those branches go.
 
@@ -227,4 +230,4 @@ pre-commit run --all-files
 
 ---
 
-*Last updated: refactor executed — single-page `Home.py`, `ee_auth.py` service-account helper (`GCP_SERVICE_ACCOUNT_JSON` + `EE_PROJECT_ID`), HF Space front matter in `README.md`, optional weekly EE smoke test under `.github/workflows/`. `EARTHENGINE_TOKEN` OAuth path no longer wired; documented for historical context only.*
+*Last updated: HF Spaces use Docker SDK (`sdk: docker`, port 7860) per 2025-04 changelog; repo includes root `Dockerfile`. Otherwise: single-page `Home.py`, `ee_auth.py` (`GCP_SERVICE_ACCOUNT_JSON` + `EE_PROJECT_ID`), optional weekly EE smoke test. `EARTHENGINE_TOKEN` OAuth path not wired.*

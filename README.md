@@ -3,9 +3,8 @@ title: Satellite Timelapse
 emoji: "\U0001F6F0"
 colorFrom: blue
 colorTo: green
-sdk: streamlit
-sdk_version: 1.36.0
-app_file: Home.py
+sdk: docker
+app_port: 7860
 pinned: false
 short_description: Generate satellite timelapse animations for any region.
 ---
@@ -99,10 +98,19 @@ interactive Earth Engine computations like timelapses.
 
 ### 7. Create a private Hugging Face Space
 
+Hugging Face **removed the standalone Streamlit SDK** from the Space creation
+wizard ([changelog entry](https://huggingface.co/docs/hub/spaces-changelog), 2025-04-30). **New Streamlit apps use the Docker SDK.**
+
 1. Go to <https://huggingface.co/new-space>.
-2. Choose **SDK: Streamlit**, **Visibility: Private**, **Hardware: CPU basic**.
-3. Either link this GitHub repository, or push the repo contents to the Space
-   git remote.
+2. Choose **SDK: Docker**, **Visibility: Private**, **Hardware: CPU basic**.
+3. When prompted, pick the **Streamlit** Docker template (or any empty Docker Space).
+4. Either link this GitHub repository, or push the repo contents to the Space git remote.
+
+This repository ships a root [`Dockerfile`](Dockerfile) that installs apt packages
+(mirroring [`packages.txt`](packages.txt)), runs `pip install -r requirements.txt`, and
+starts Streamlit on port **7860** (required for Docker Spaces). The YAML block at the
+top of this [`README.md`](README.md) sets `sdk: docker` and `app_port: 7860` so the Hub
+routes traffic correctly.
 
 ### 8. Add the secrets to the Space
 
@@ -135,10 +143,10 @@ cp .env.example .env
 streamlit run Home.py
 ```
 
-The system dependencies in [`packages.txt`](packages.txt) (ffmpeg, gifsicle,
-GDAL, etc.) are installed automatically on Hugging Face Spaces. For local
-macOS development you can install equivalents via Homebrew (`brew install
-ffmpeg gifsicle gdal`).
+The system dependencies in [`packages.txt`](packages.txt) are mirrored in the
+[`Dockerfile`](Dockerfile) for Hugging Face Spaces. On **local** macOS/Linux,
+install equivalents yourself (for example `brew install ffmpeg gifsicle gdal`
+on macOS) before running `streamlit run Home.py`.
 
 ## Cost expectations
 
@@ -192,13 +200,15 @@ That sequence avoids any window where two owners hold valid credentials.
 ```
 .
 ├── .agent/agent.md          # internal architecture / decisions doc
+├── .dockerignore            # Docker build context exclusions
 ├── .env.example             # local development environment template
 ├── .github/                 # FUNDING.yml (and optional smoke-test workflow)
+├── Dockerfile               # HF Spaces Docker SDK image (Streamlit on port 7860)
 ├── ee_auth.py               # service-account Earth Engine auth helper
 ├── Home.py                  # Streamlit app (the only page)
-├── packages.txt             # APT packages installed on Hugging Face Spaces
+├── packages.txt             # APT packages (mirrored in Dockerfile for HF)
 ├── requirements.txt         # Python dependencies
-└── README.md                # this file (also serves as HF Space front matter)
+└── README.md                # this file (HF Space front matter: sdk docker)
 ```
 
 ## License
