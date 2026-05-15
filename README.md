@@ -118,9 +118,12 @@ Hugging Face creates a **git repository on the Hub** for the Space. There is no 
 
 This repository ships a root [`Dockerfile`](Dockerfile) that installs apt packages
 (mirroring [`packages.txt`](packages.txt)), runs `pip install -r requirements.txt`, and
-starts Streamlit on port **7860** (required for Docker Spaces). The YAML block at the
-top of this [`README.md`](README.md) sets `sdk: docker` and `app_port: 7860` so the Hub
-routes traffic correctly.
+starts Streamlit on port **7860** (required for Docker Spaces). Streamlit is started with
+**XSRF protection disabled** so `st.file_uploader` (GeoJSON uploads) works when the Space
+is embedded on `huggingface.co` (cookie / iframe limitations; see
+[Hugging Face docs on Spaces cookies](https://huggingface.co/docs/hub/spaces-cookie-limitations)).
+The YAML block at the top of this [`README.md`](README.md) sets `sdk: docker` and
+`app_port: 7860` so the Hub routes traffic correctly.
 
 ### 8. Add Earth Engine secrets on the Space
 
@@ -246,6 +249,7 @@ default is generous but Earth Engine will reject extreme requests.
 | App was working, suddenly fails to authenticate | SA key revoked or project unregistered | Recreate the key (step 6) and / or re-register the project for Earth Engine |
 | GitHub Action “Sync to Hugging Face Space” fails | Missing `HF_TOKEN` or `HF_SPACE_REPO`, or wrong Space path | Add the secret and variable under repo **Settings → Actions**; `HF_SPACE_REPO` must be `username/space-name` |
 | `git push` rejected (401) | Token expired or lacks write scope | Regenerate token at HF settings; ensure **write** to that Space |
+| `AxiosError` **403** on file upload (GeoJSON) on the Space only | Streamlit XSRF + HF iframe / proxy cookie behavior for Docker Spaces | Already fixed in this repo’s `Dockerfile` (`--server.enableXsrfProtection false`); rebuild / redeploy the Space |
 
 For deeper context (architecture decisions, geemap internals, IAM trade-offs)
 see [`.agent/agent.md`](.agent/agent.md).

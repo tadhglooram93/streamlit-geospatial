@@ -34,8 +34,12 @@ COPY --chown=user . .
 
 EXPOSE 7860
 
+# HF Spaces embeds the app in an iframe; Streamlit's default XSRF cookie checks
+# break multipart uploads (st.file_uploader) with Axios 403. Native Streamlit
+# SDK Spaces disable this; Docker images must opt out explicitly.
 CMD ["streamlit", "run", "Home.py", \
     "--server.port", "7860", \
     "--server.address", "0.0.0.0", \
     "--server.headless", "true", \
+    "--server.enableXsrfProtection", "false", \
     "--browser.gatherUsageStats", "false"]
