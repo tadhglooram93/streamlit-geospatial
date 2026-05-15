@@ -8,6 +8,7 @@ This document summarizes the repository, how Earth Engine auth works in practice
 > - Earth Engine auth: service-account only, via `ee_auth.init_earth_engine()` reading `GCP_SERVICE_ACCOUNT_JSON` and `EE_PROJECT_ID` from the environment. `EARTHENGINE_TOKEN` is no longer used.
 > - Hugging Face Space metadata lives in the YAML front matter of `README.md` (`sdk: docker`, `app_port: 7860`). Streamlit runs inside the repo `Dockerfile` (HF deprecated the standalone Streamlit SDK for new Spaces in 2025-04).
 > - Optional credential smoke test: `scripts/smoke_test_ee.py` plus `.github/workflows/ee-smoke-test.yml` (weekly + manual dispatch).
+> - **GitHub → Space sync**: `.github/workflows/sync_to_hub.yml` pushes `main` to the Hugging Face Space when `secrets.HF_TOKEN` and `vars.HF_SPACE_REPO` (`username/space-name`) are configured on the GitHub repository.
 
 ---
 
@@ -30,7 +31,7 @@ This document summarizes the repository, how Earth Engine auth works in practice
 | `README.md` | Hugging Face Space front matter (`sdk: docker`, `app_port: 7860`) + owner-friendly setup guide (GCP, EE, SA, HF, troubleshooting, handoff). |
 | `.env.example` | Local development template for `GCP_SERVICE_ACCOUNT_JSON` and `EE_PROJECT_ID`. |
 | `scripts/smoke_test_ee.py` | Minimal credential smoke test runnable locally or via GitHub Actions. |
-| `.github/workflows/ee-smoke-test.yml` | Scheduled (weekly) + manual workflow that runs the smoke test against `secrets.GCP_SERVICE_ACCOUNT_JSON` and `secrets.EE_PROJECT_ID`. |
+| `.github/workflows/sync_to_hub.yml` | On push to `main`, force-pushes the repo to `https://huggingface.co/spaces/${HF_SPACE_REPO}` using `secrets.HF_TOKEN` and `vars.HF_SPACE_REPO`. |
 | `.pre-commit-config.yaml` | Black (Jupyter), basic hygiene hooks, `nbstripout`. |
 
 ### Earth Engine usage (current)
@@ -110,7 +111,7 @@ Document these for “plug in when you take over”:
 | **`EE_PROJECT_ID`** | GCP **project id** for `ee.Initialize(project=...)`. Optional — if omitted, derived from `project_id` inside the SA JSON. | HF Space variable / GitHub Actions secret |
 | **Service account email** | Identifier like `name@PROJECT_ID.iam.gserviceaccount.com`. | Read from `client_email` in the SA JSON (no separate secret needed) |
 | **Hugging Face account** | Owns the Space; can stay private. | N/A |
-| **HF token with write** (optional) | Only if **GitHub Actions** pushes to the Hub or calls Hub APIs; **not** required for the Space runtime. | GitHub Actions secret `HF_TOKEN` |
+| **HF token with write** (optional) | Pushes GitHub `main` to the Space via `.github/workflows/sync_to_hub.yml` (not used by the Streamlit runtime). | GitHub Actions **secret** `HF_TOKEN`; repository **variable** `HF_SPACE_REPO` = `username/space-name` |
 | **No separate “Earth Engine API key”** | EE uses service accounts, OAuth refresh bundles, or ADC—not a single REST-style API key. | — |
 
 Keep **`.env.example`** (committed) listing variable **names** only; real values live in HF / GHA.
@@ -184,14 +185,17 @@ Future agents who want to slim further can drop unused collection branches in `H
 
 ### 4.6 GitHub Actions
 
-`.github/workflows/ee-smoke-test.yml` runs `scripts/smoke_test_ee.py` weekly (Mondays 13:00 UTC) and on manual dispatch, using `secrets.GCP_SERVICE_ACCOUNT_JSON` and `secrets.EE_PROJECT_ID`. It fails the run if Earth Engine cannot initialize or if the SRTM image cannot be fetched. With service-account auth this should be near-zero maintenance; the workflow exists as an early-warning system, not a refresh mechanism.
+- **Earth Engine smoke test** (`.github/workflows/ee-smoke-test.yml`): weekly + manual; needs `secrets.GCP_SERVICE_ACCOUNT_JSON` and `secrets.EE_PROJECT_ID`.
+- **Sync to Hugging Face Space** (`.github/workflows/sync_to_hub.yml`): on every push to `main` (and manual dispatch); needs `secrets.HF_TOKEN` and repository variable `vars.HF_SPACE_REPO` (`username/space-name`). This replaces a non-existent “link GitHub repo” button for Docker Spaces.
+
+With service-account auth the EE smoke test is near-zero maintenance; the sync workflow is the standard way to keep the Hub Space identical to GitHub `main`.
 
 ### 4.7 Handoff to final owner (friend)
 
 1. **GitHub**: Transfer repo ownership; add her as admin / transfer the HF Space to her account.
 2. **GCP**: She repeats **§4.2** (new Cloud project → EE registration → enable EE API → create SA → IAM: Service Usage Consumer + Earth Engine Resource Writer → download JSON key).
 3. **HF Space**: She replaces `GCP_SERVICE_ACCOUNT_JSON` and `EE_PROJECT_ID` with her own values, restarts the Space, and confirms a small timelapse renders.
-4. **GitHub Actions**: She updates the same secrets at the repo level so the smoke test keeps running under her credentials.
+4. **GitHub Actions**: She updates `HF_TOKEN`, `HF_SPACE_REPO`, `GCP_SERVICE_ACCOUNT_JSON`, and `EE_PROJECT_ID` at the repo level as needed.
 5. **Revoke previous keys**: Delete the old SA JSON key from IAM → Keys after the new owner’s environment is green.
 6. **Docs**: Point her to `README.md` for setup and to **§4.2** of this file for the IAM / GCP context.
 

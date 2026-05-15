@@ -103,8 +103,8 @@ wizard ([changelog entry](https://huggingface.co/docs/hub/spaces-changelog), 202
 
 1. Go to <https://huggingface.co/new-space>.
 2. Choose **SDK: Docker**, **Visibility: Private**, **Hardware: CPU basic**.
-3. When prompted, pick the **Streamlit** Docker template (or any empty Docker Space).
-4. Either link this GitHub repository, or push the repo contents to the Space git remote.
+3. When prompted, pick the **Streamlit** Docker template (or start from an empty Docker Space and replace its files).
+4. Hugging Face creates a **git repository on the Hub** for the Space (there is no “connect my GitHub repo” button in the Docker flow). Push your code with **git** from your laptop or use **GitHub Actions** (see [GitHub → Hugging Face sync](#github--hugging-face-space-automated-sync) below).
 
 This repository ships a root [`Dockerfile`](Dockerfile) that installs apt packages
 (mirroring [`packages.txt`](packages.txt)), runs `pip install -r requirements.txt`, and
@@ -124,6 +124,39 @@ In the Space's **Settings → Variables and secrets**, add:
 Then **Restart** the Space. After the build completes, the Timelapse app
 should load and render the map.
 
+### 9. GitHub → Hugging Face Space (automated sync)
+
+Hugging Face does **not** provide a one-click “link this GitHub repository” for
+Docker Spaces. The usual approach is to keep **GitHub as the source of truth**
+and push every commit on `main` to the Space’s Hub git remote with **GitHub
+Actions** (see also [Managing Spaces with GitHub Actions](https://huggingface.co/docs/hub/spaces-github-actions)).
+
+This repo includes [`.github/workflows/sync_to_hub.yml`](.github/workflows/sync_to_hub.yml).
+
+1. **Create a Hugging Face access token** with **write** access (classic *Write*
+   token, or a fine-grained token that can write to your Space repository).  
+   [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+
+2. **On GitHub** (this repository): **Settings → Secrets and variables → Actions**
+
+   - **Secrets → New repository secret**  
+     - Name: `HF_TOKEN`  
+     - Value: your Hugging Face token
+
+   - **Variables → New repository variable**  
+     - Name: `HF_SPACE_REPO`  
+     - Value: `your_hf_username/your_space_name`  
+       (exactly as in the Space URL: `https://huggingface.co/spaces/your_hf_username/your_space_name`)
+
+3. Push to **`main`** (or open **Actions → Sync to Hugging Face Space → Run workflow**).
+   The workflow force-pushes `main` to the Space so the Hub always matches this repo.
+
+**Notes**
+
+- The first successful run overwrites whatever files the Space template created.
+- If your default branch is not `main`, either rename it or edit the workflow branch list and the `git push … HEAD:main` line.
+- `HF_TOKEN` and `HF_SPACE_REPO` are **only for GitHub Actions** (and optional local tooling). They are **not** Space runtime secrets and are **not** read by `Home.py`.
+
 ## Local development
 
 ```bash
@@ -135,8 +168,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env and paste your service account JSON + project id.
+# Edit .env: set GCP_SERVICE_ACCOUNT_JSON and EE_PROJECT_ID for Earth Engine.
 # Make sure GCP_SERVICE_ACCOUNT_JSON is on a single line of valid JSON.
+# Optional lines HF_TOKEN / HF_SPACE_REPO are for local Hub tooling only — the
+# Streamlit app does not read them. GitHub → Space sync uses Actions secrets/vars.
 
 # Streamlit reads environment variables from your shell; export them or use
 # a tool like `direnv` / `dotenv` to load the .env file before running.
@@ -175,6 +210,8 @@ default is generous but Earth Engine will reject extreme requests.
 | `Earth Engine client library has not been initialized` | App tried to call EE before init | Reload the page; if it persists, check the Space build logs |
 | Timelapse computation errors mid-run | ROI too large or date range too long | Shrink the bounding box or pick a shorter time window |
 | App was working, suddenly fails to authenticate | SA key revoked or project unregistered | Recreate the key (step 6) and / or re-register the project for Earth Engine |
+| GitHub Action “Sync to Hugging Face Space” fails | Missing `HF_TOKEN` or `HF_SPACE_REPO`, or wrong Space path | Add the secret and variable under repo **Settings → Actions**; `HF_SPACE_REPO` must be `username/space-name` |
+| `git push` rejected (401) | Token expired or lacks write scope | Regenerate token at HF settings; ensure **write** to that Space |
 
 For deeper context (architecture decisions, geemap internals, IAM trade-offs)
 see [`.agent/agent.md`](.agent/agent.md).
@@ -189,8 +226,10 @@ ownership is a credential swap with no code changes:
    transferred to them).
 3. New owner replaces the values of `GCP_SERVICE_ACCOUNT_JSON` and
    `EE_PROJECT_ID` in the Space settings, then restarts the Space.
-4. New owner confirms a small timelapse renders successfully.
-5. Previous owner deletes the old service account key from
+4. On **GitHub**, the new owner updates Actions **secret** `HF_TOKEN` and
+   **variable** `HF_SPACE_REPO` if the Space URL or HF account changed.
+5. New owner confirms a small timelapse renders successfully.
+6. Previous owner deletes the old service account key from
    **IAM & Admin → Service Accounts → Keys** to revoke access.
 
 That sequence avoids any window where two owners hold valid credentials.
@@ -202,7 +241,7 @@ That sequence avoids any window where two owners hold valid credentials.
 ├── .agent/agent.md          # internal architecture / decisions doc
 ├── .dockerignore            # Docker build context exclusions
 ├── .env.example             # local development environment template
-├── .github/                 # FUNDING.yml (and optional smoke-test workflow)
+├── .github/workflows/       # sync_to_hub.yml, ee-smoke-test.yml
 ├── Dockerfile               # HF Spaces Docker SDK image (Streamlit on port 7860)
 ├── ee_auth.py               # service-account Earth Engine auth helper
 ├── Home.py                  # Streamlit app (the only page)

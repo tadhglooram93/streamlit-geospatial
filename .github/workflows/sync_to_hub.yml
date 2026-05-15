@@ -1,0 +1,51 @@
+# Pushes this GitHub repository to a Hugging Face Space git remote on every
+# push to main. HF does not offer a one-click "link GitHub repo" for Docker
+# Spaces — this is the standard workflow. See README.md for setup.
+
+name: Sync to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-hf-space
+  cancel-in-progress: true
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_REPO: ${{ vars.HF_SPACE_REPO }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HF_TOKEN:-}" ]; then
+            echo "::error::Missing secret HF_TOKEN. Add a Hugging Face token with write access under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ -z "${HF_SPACE_REPO:-}" ]; then
+            echo "::error::Missing repository variable HF_SPACE_REPO. Under Settings → Secrets and variables → Actions → Variables, set HF_SPACE_REPO to yourusername/your-space-name (the path after https://huggingface.co/spaces/)."
+            exit 1
+          fi
+          HF_USER="${HF_SPACE_REPO%%/*}"
+          HF_NAME="${HF_SPACE_REPO#*/}"
+          if [ "$HF_USER" = "$HF_SPACE_REPO" ] || [ -z "$HF_NAME" ]; then
+            echo "::error::HF_SPACE_REPO must be username/space-name (no leading slash). Got: ${HF_SPACE_REPO}"
+            exit 1
+          fi
+          REMOTE="https://${HF_USER}:${HF_TOKEN}@huggingface.co/spaces/${HF_USER}/${HF_NAME}"
+          echo "Pushing to Hugging Face Space: ${HF_USER}/${HF_NAME}"
+          git push --force "${REMOTE}" "HEAD:main"
