@@ -96,6 +96,15 @@ interactive Earth Engine computations like timelapses.
 3. Do **not** commit it to git. The repo's `.gitignore` already covers `.env`
    and `private/`, but be careful when pasting elsewhere.
 
+**Deploy path (Hugging Face + GitHub Actions)** — do these in order after steps 1–6:
+
+1. **Create** a private Docker Space on Hugging Face (step **7**).
+2. **Add Earth Engine secrets** on the Space: `GCP_SERVICE_ACCOUNT_JSON` and `EE_PROJECT_ID` (step **8**).
+3. **Add deploy credentials** on GitHub: repository secret `HF_TOKEN` and variable `HF_SPACE_REPO` (step **9**).
+4. **Push to `main`** on GitHub. [`.github/workflows/sync_to_hub.yml`](.github/workflows/sync_to_hub.yml) pushes this repo to the Space; Hugging Face then **rebuilds the Docker image** and runs the app.
+
+You do not need to `git push` to Hugging Face manually if you use this workflow.
+
 ### 7. Create a private Hugging Face Space
 
 Hugging Face **removed the standalone Streamlit SDK** from the Space creation
@@ -103,8 +112,9 @@ wizard ([changelog entry](https://huggingface.co/docs/hub/spaces-changelog), 202
 
 1. Go to <https://huggingface.co/new-space>.
 2. Choose **SDK: Docker**, **Visibility: Private**, **Hardware: CPU basic**.
-3. When prompted, pick the **Streamlit** Docker template (or start from an empty Docker Space and replace its files).
-4. Hugging Face creates a **git repository on the Hub** for the Space (there is no “connect my GitHub repo” button in the Docker flow). Push your code with **git** from your laptop or use **GitHub Actions** (see [GitHub → Hugging Face sync](#github--hugging-face-space-automated-sync) below).
+3. Pick the **Streamlit** Docker template, or an **empty** Docker Space (the first sync in step **9** will replace template files with this repo).
+
+Hugging Face creates a **git repository on the Hub** for the Space. There is no “link my GitHub repo” button for Docker Spaces — code is shipped with **GitHub Actions** in step **9**.
 
 This repository ships a root [`Dockerfile`](Dockerfile) that installs apt packages
 (mirroring [`packages.txt`](packages.txt)), runs `pip install -r requirements.txt`, and
@@ -112,7 +122,7 @@ starts Streamlit on port **7860** (required for Docker Spaces). The YAML block a
 top of this [`README.md`](README.md) sets `sdk: docker` and `app_port: 7860` so the Hub
 routes traffic correctly.
 
-### 8. Add the secrets to the Space
+### 8. Add Earth Engine secrets on the Space
 
 In the Space's **Settings → Variables and secrets**, add:
 
@@ -121,17 +131,15 @@ In the Space's **Settings → Variables and secrets**, add:
 | `GCP_SERVICE_ACCOUNT_JSON`  | Secret | Paste the **entire** contents of the service account JSON file         |
 | `EE_PROJECT_ID`             | Secret | Your GCP project ID (the lowercase string from step 1)                 |
 
-Then **Restart** the Space. After the build completes, the Timelapse app
-should load and render the map.
+If the Space was already running, use **Restart** or **Factory reboot** in the Space settings so new secrets are picked up cleanly.
 
-### 9. GitHub → Hugging Face Space (automated sync)
+Save, then continue to step **9** before expecting the app to work in the browser (the Space needs both the image from GitHub **and** these runtime secrets).
 
-Hugging Face does **not** provide a one-click “link this GitHub repository” for
-Docker Spaces. The usual approach is to keep **GitHub as the source of truth**
-and push every commit on `main` to the Space’s Hub git remote with **GitHub
-Actions** (see also [Managing Spaces with GitHub Actions](https://huggingface.co/docs/hub/spaces-github-actions)).
+### 9. Connect GitHub and push to main
 
-This repo includes [`.github/workflows/sync_to_hub.yml`](.github/workflows/sync_to_hub.yml).
+Keep **GitHub as the source of truth**. This repo includes
+[`.github/workflows/sync_to_hub.yml`](.github/workflows/sync_to_hub.yml), which mirrors
+the [official Hub pattern](https://huggingface.co/docs/hub/spaces-github-actions).
 
 1. **Create a Hugging Face access token** with **write** access (classic *Write*
    token, or a fine-grained token that can write to your Space repository).  
@@ -148,14 +156,16 @@ This repo includes [`.github/workflows/sync_to_hub.yml`](.github/workflows/sync_
      - Value: `your_hf_username/your_space_name`  
        (exactly as in the Space URL: `https://huggingface.co/spaces/your_hf_username/your_space_name`)
 
-3. Push to **`main`** (or open **Actions → Sync to Hugging Face Space → Run workflow**).
-   The workflow force-pushes `main` to the Space so the Hub always matches this repo.
+3. **Push to `main`** (merge a PR, or **Actions → Sync to Hugging Face Space → Run workflow**).
+   The workflow **force-pushes** `main` to the Space’s Hub git remote. Hugging Face picks up the new commit and **rebuilds / redeploys** the Space.
 
 **Notes**
 
-- The first successful run overwrites whatever files the Space template created.
-- If your default branch is not `main`, either rename it or edit the workflow branch list and the `git push … HEAD:main` line.
+- The first successful sync overwrites whatever files the Space template created.
+- If your default branch is not `main`, either rename it or edit the workflow branch list and the `git push … HEAD:main` line in `sync_to_hub.yml`.
 - `HF_TOKEN` and `HF_SPACE_REPO` are **only for GitHub Actions** (and optional local tooling). They are **not** Space runtime secrets and are **not** read by `Home.py`.
+
+After the Space build finishes, open the Space URL — the map should load if step **8** is complete.
 
 ## Local development
 
@@ -218,18 +228,15 @@ see [`.agent/agent.md`](.agent/agent.md).
 
 ## Credential rotation and ownership handoff
 
-Because all credentials live in **Hugging Face Space secrets**, transferring
-ownership is a credential swap with no code changes:
+Because all **runtime** credentials live in **Hugging Face Space secrets**, and
+**deploy** credentials live in **GitHub Actions**, transferring ownership is
+mostly updating those values:
 
-1. New owner completes steps 1–6 (their own GCP project + service account).
-2. New owner is added as a collaborator on the Space (or the Space is
-   transferred to them).
-3. New owner replaces the values of `GCP_SERVICE_ACCOUNT_JSON` and
-   `EE_PROJECT_ID` in the Space settings, then restarts the Space.
-4. On **GitHub**, the new owner updates Actions **secret** `HF_TOKEN` and
-   **variable** `HF_SPACE_REPO` if the Space URL or HF account changed.
-5. New owner confirms a small timelapse renders successfully.
-6. Previous owner deletes the old service account key from
+1. New owner completes steps **1–6** (their own GCP project + service account).
+2. New owner gets access to the **Space** and this **GitHub** repository (collaborator or transfer).
+3. New owner updates **Space** secrets `GCP_SERVICE_ACCOUNT_JSON` and `EE_PROJECT_ID`, and **GitHub** secret `HF_TOKEN` plus variable `HF_SPACE_REPO` if the Space URL or HF account changed; then **push to `main`** (or run the sync workflow) so the Space redeploys.
+4. New owner confirms a small timelapse renders successfully.
+5. Previous owner deletes the old service account key from
    **IAM & Admin → Service Accounts → Keys** to revoke access.
 
 That sequence avoids any window where two owners hold valid credentials.
